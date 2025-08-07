@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: agent-dev-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=5000
+      - DATABASE_URL=sqlite:///./agents.db
+      - SECRET_KEY=your-secret-key-change-this-in-production
+      - JWT_SECRET=your-jwt-secret-change-this-in-production
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./agents:/app/agents
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - agent-db-data:/app/data
+    depends_on:
+      - redis
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: agent-dev-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://51.81.187.172:5000
+      - REACT_APP_WS_URL=ws://51.81.187.172:5000
+    depends_on:
+      - backend
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Redis for WebSocket and caching
+  redis:
+    image: redis:7-alpine
+    container_name: agent-dev-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # OpenHands Runtime (if needed)
+  openhands-runtime:
+    image: docker.all-hands.dev/all-hands-ai/runtime:0.15-nikolaik
+    container_name: agent-dev-openhands-runtime
+    environment:
+      - SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:0.15-nikolaik
+      - LOG_ALL_EVENTS=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: agent-dev-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+volumes:
+  agent-db-data:
+  redis-data:
+
+networks:
+  agent-network:
+    driver: bridge
