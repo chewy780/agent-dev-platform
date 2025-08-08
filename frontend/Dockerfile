@@ -1,31 +1,22 @@
-FROM node:18-alpine as build
-
-# Set working directory
+FROM node:18-bullseye-slim AS build
 WORKDIR /app
 
-# Copy package files
+# Copy package and lockfiles first
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Use clean, reproducible install from lockfile
+RUN npm ci --omit=dev --no-audit --no-fund
 
-# Copy source code
+# Copy source
 COPY . .
 
-# Build the application
+# Build
+ENV CI=false GENERATE_SOURCEMAP=false
 RUN npm run build
 
-# Production stage
+# Runtime
 FROM nginx:alpine
-
-# Copy built application
 COPY --from=build /app/build /usr/share/nginx/html
-
-# Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Expose port
 EXPOSE 3000
-
-# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
